@@ -4,24 +4,23 @@ use serde::Deserialize;
 use crate::errors::ServiceError;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SalesforceConfiguration {
     #[serde(rename = "salesForceUrl")]
     salesforce_url: String,
-    #[serde(rename = "userName")]
     user_name: String,
     password: String,
-    #[serde(rename = "consumerKey")]
     consumer_key: String,
-    #[serde(rename = "consumerSecret")]
     consumer_secret: String,
-    #[serde(rename = "soapEndpoint")]
     soap_endpoint: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct ServiceConfiguration {
-    #[serde(rename = "EncryptionBaseUri")]
-    encryption_url: String,
+    pub encryption_base_uri: String,
+    pub timeout_seconds: Option<u64>,
+    pub port: Option<u16>
 }
 
 impl TryFrom<Parameter> for ServiceConfiguration {

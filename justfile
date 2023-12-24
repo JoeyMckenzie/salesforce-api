@@ -8,6 +8,10 @@ clippy:
 cw:
     cargo watch -x clippy
 
+# install dependencies for React and Laravel
+cr:
+    cargo watch -x run
+
 # runs tail logging
 pail:
     php artisan pail

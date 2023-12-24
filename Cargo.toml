@@ -10,9 +10,10 @@ edition = "2021"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1.0"
 serde_json = "1.0"
+validator = { version = "0.16", features = ["derive"] }
 
 # Network crates
-axum = "0.7"
+axum = { version= "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.11", features = ["json"] }
 
@@ -23,11 +24,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # AWS crates
 aws-config = { version = "1.1", features = ["behavior-version-latest"] }
 aws-sdk-ssm = "1.9.0"
-
-[lib]
-name = "salesforce"
-path = "src/lib.rs"
-
-[[bin]]
-name = "service"
-path = "src/main.rs"
+async-trait = { version = "0.1.75", features = [] }
+http-body = "0.4.6"
