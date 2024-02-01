@@ -5,6 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "salesforce_api"
+path = "src/main.rs"
+
+[lib]
+name = "salesforce_api"
+path = "src/lib.rs"
+
 [dependencies]
 # Utilitiy crates
 serde = { version = "1.0", features = ["derive"] }
@@ -13,9 +21,9 @@ serde_json = "1.0"
 validator = { version = "0.16", features = ["derive"] }
 
 # Network crates
-axum = { version= "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", features = ["json", "multipart"] }
 
 # Logging crates
 tracing = "0.1"
@@ -26,3 +34,4 @@ aws-config = { version = "1.1", features = ["behavior-version-latest"] }
 aws-sdk-ssm = "1.9.0"
 async-trait = { version = "0.1.75", features = [] }
 http-body = "0.4.6"
+time = "0.3.31"

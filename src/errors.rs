@@ -5,8 +5,8 @@ use aws_sdk_ssm::error::SdkError;
 use aws_sdk_ssm::operation::get_parameter::GetParameterError;
 use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
-use axum::Json;
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use serde_json::json;
 use thiserror::Error;
 
@@ -40,15 +40,32 @@ pub enum ServiceError {
     /// Represents a failure when loading application configuration from SSM at startup.
     #[error(transparent)]
     JsonParsingError(#[from] JsonRejection),
+    #[error("Access token was not found on the configuration.")]
+    AccessTokenNotFound,
+    #[error("A Salesforce instance URL was not found.")]
+    InstanceUrlNotFound,
+    #[error("{0}")]
+    AuthenticationLockFailed(String),
+    #[error("{0}")]
+    ObjectRetrievalFailed(String),
 }
 
 impl IntoResponse for ServiceError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            Self::ParameterConfigurationNameEmpty => (StatusCode::INTERNAL_SERVER_ERROR, Self::ParameterConfigurationNameEmpty.to_string()),
-            Self::ParameterConfigurationFailedToLoad(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-            Self::LoadConfigurationFailed(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
-            Self::ConfigurationDeserializationFailed(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+            Self::ParameterConfigurationNameEmpty => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Self::ParameterConfigurationNameEmpty.to_string(),
+            ),
+            Self::ParameterConfigurationFailedToLoad(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
+            Self::LoadConfigurationFailed(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
+            Self::ConfigurationDeserializationFailed(err) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            }
             Self::RequestInvalid(err) => (StatusCode::UNPROCESSABLE_ENTITY, err.to_string()),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
