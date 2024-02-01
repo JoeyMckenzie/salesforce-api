@@ -1,8 +1,9 @@
+use reqwest::StatusCode;
 use std::ops::Add;
 use std::time::Duration;
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -124,16 +125,15 @@ impl SalesforceService {
                         instance_url, object, id
                     );
                     dbg!(&url);
-                    let response = self
-                        .http
-                        .get(&url)
-                        .bearer_auth(access_token)
-                        .send()
-                        .await?
-                        .json::<Value>()
-                        .await?;
+                    let response = self.http.get(&url).bearer_auth(access_token).send().await?;
 
-                    Ok(response)
+                    if response.status() == StatusCode::NOT_FOUND {
+                        return Err(ServiceError::ObjectNotFound);
+                    }
+
+                    let object = response.json::<Value>().await?;
+
+                    Ok(object)
                 }
             },
             Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),

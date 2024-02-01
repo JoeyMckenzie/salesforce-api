@@ -48,6 +48,8 @@ pub enum ServiceError {
     AuthenticationLockFailed(String),
     #[error("{0}")]
     ObjectRetrievalFailed(String),
+    #[error("Object was not found.")]
+    ObjectNotFound,
 }
 
 impl IntoResponse for ServiceError {
@@ -67,6 +69,7 @@ impl IntoResponse for ServiceError {
                 (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
             }
             Self::RequestInvalid(err) => (StatusCode::UNPROCESSABLE_ENTITY, err.to_string()),
+            Self::ObjectNotFound => (StatusCode::NOT_FOUND, Self::ObjectNotFound.to_string()),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 String::from("Unexpected error occurred."),
