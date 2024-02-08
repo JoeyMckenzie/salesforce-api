@@ -1,0 +1,6 @@
+/target
+.gitignore
+.env
+docker-compose.yml
+justfile
+README.md

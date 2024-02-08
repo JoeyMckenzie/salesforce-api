@@ -1,6 +1,7 @@
 use std::ops::Add;
 use std::time::Duration;
 
+use regex::Regex;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
@@ -134,6 +135,34 @@ impl SalesforceService {
                     let object = response.json::<Value>().await?;
 
                     Ok(object)
+                }
+            },
+            Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),
+        }
+    }
+
+    pub async fn get_objects(&self, soql: String) -> ServiceResult<Value> {
+        let access_token = self.get_access_token().await?;
+
+        match self.instance_url.try_lock() {
+            Ok(lock) => match lock.as_ref() {
+                None => Err(ServiceError::InstanceUrlNotFound),
+                Some(instance_url) => {
+                    let regex = Regex::new(r"\s+").unwrap();
+                    let updated_soql = regex.replace_all(&soql, " ").to_string();
+
+                    info!("Executing adjusted SOQL query:\n{updated_soql}");
+
+                    let url = format!(
+                        "{}/services/data/v59.0/query/?q={}",
+                        instance_url,
+                        updated_soql.replace(' ', "+")
+                    );
+
+                    let response = self.http.get(&url).bearer_auth(access_token).send().await?;
+                    let objects = response.json::<Value>().await?;
+
+                    Ok(objects)
                 }
             },
             Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),

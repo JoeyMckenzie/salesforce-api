@@ -11,9 +11,9 @@
 
 pub mod config;
 pub mod errors;
-pub mod extractors;
 pub mod organization;
 pub mod requests;
 pub mod responses;
 pub mod router;
 pub mod salesforce;
+pub mod extractors;

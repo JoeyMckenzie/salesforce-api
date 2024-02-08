@@ -1,20 +1,30 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde_json::Value;
 use tracing::info;
 
 use crate::errors::ServiceResult;
-use crate::extractors::{ExtractSalesforceOrg, ValidatedJson};
+use crate::extractors::extract_org::ExtractSalesforceOrg;
+use crate::extractors::resolve_service::ResolveSalesforceService;
+use crate::extractors::validation::ValidatedJson;
 use crate::requests::CreateObjectRecordRequest;
 use crate::responses::TransactionSuccessfulResponse;
 use crate::salesforce::factory::SalesforceServiceResolver;
+use crate::salesforce::service::SalesforceService;
 
 #[derive(Debug)]
 pub struct RouterState {
     pub resolver: SalesforceServiceResolver,
+}
+
+#[derive(Debug)]
+pub struct AppState {
+    pub uw_service: SalesforceService,
+    pub nf_service: SalesforceService,
+    pub qb_service: SalesforceService,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -26,8 +36,9 @@ impl ServiceRouter {
 
         Router::new()
             .route("/objects/:name/:id", get(find))
-            .route("/objects", get(query))
+            .route("/objects/query", post(query))
             .route("/objects", post(create))
+            .route("/objects", put(update))
             .with_state(Arc::new(state))
     }
 }
@@ -38,7 +49,7 @@ async fn find(
     State(state): State<Arc<RouterState>>,
     Path((name, id)): Path<(String, String)>,
 ) -> ServiceResult<Json<Value>> {
-    info!("Received request to find object {name} by id {id}, requesting access token");
+    info!("Received request to find object {name} by id {id}");
 
     let object = state
         .resolver
@@ -49,16 +60,30 @@ async fn find(
     Ok(Json(object))
 }
 
-#[tracing::instrument(skip(state))]
-async fn query(State(state): State<Arc<RouterState>>, soql: String) -> ServiceResult<String> {
-    info!("Received request for query, executing...");
-    Ok(soql)
+#[tracing::instrument]
+async fn query(
+    ResolveSalesforceService(service): ResolveSalesforceService,
+    soql: String,
+) -> ServiceResult<Json<Value>> {
+    info!("Received request for SOQL query");
+
+    let objects = service.get_objects(soql).await?;
+
+    Ok(Json(objects))
 }
 
-#[tracing::instrument(skip(state))]
-#[axum::debug_handler]
+#[tracing::instrument]
 async fn create(
-    State(state): State<Arc<RouterState>>,
+    ValidatedJson(request): ValidatedJson<CreateObjectRecordRequest>,
+) -> ServiceResult<TransactionSuccessfulResponse> {
+    info!("Received request for query, executing...");
+    Ok(TransactionSuccessfulResponse::new(
+        "Record successfully created.".to_string(),
+    ))
+}
+
+#[tracing::instrument]
+async fn update(
     ValidatedJson(request): ValidatedJson<CreateObjectRecordRequest>,
 ) -> ServiceResult<TransactionSuccessfulResponse> {
     info!("Received request for query, executing...");

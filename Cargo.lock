@@ -1543,7 +1543,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-ssm",
  "axum",
- "http-body 0.4.6",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
