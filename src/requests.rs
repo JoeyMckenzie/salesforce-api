@@ -4,8 +4,6 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateObjectRecordRequest {
-    #[validate(required, length(min = 1))]
-    object: Option<String>,
     #[validate(required)]
-    fields: Option<Value>
+    fields: Option<Value>,
 }

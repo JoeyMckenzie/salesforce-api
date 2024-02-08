@@ -1,9 +1,9 @@
-use reqwest::StatusCode;
 use std::ops::Add;
 use std::time::Duration;
 
+use reqwest::StatusCode;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -106,7 +106,7 @@ impl SalesforceService {
         }
 
         if let Ok(mut expiration_lock) = self.expires_at.try_lock() {
-            let expires_in_duration = Duration::from_secs(60);
+            let expires_in_duration = Duration::from_secs(60 * 30);
             *expiration_lock = OffsetDateTime::now_utc().add(expires_in_duration);
         }
 
@@ -124,7 +124,7 @@ impl SalesforceService {
                         "{}/services/data/v59.0/sobjects/{}/{}",
                         instance_url, object, id
                     );
-                    dbg!(&url);
+
                     let response = self.http.get(&url).bearer_auth(access_token).send().await?;
 
                     if response.status() == StatusCode::NOT_FOUND {

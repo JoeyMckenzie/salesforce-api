@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
 use thiserror::Error;
+use tracing::error;
 
 /// Wrapped result type useful for marshalling between library and dependencies errors.
 pub type ServiceResult<T> = Result<T, ServiceError>;
@@ -50,6 +51,8 @@ pub enum ServiceError {
     ObjectRetrievalFailed(String),
     #[error("Object was not found.")]
     ObjectNotFound,
+    #[error("{0}")]
+    InvalidOrganization(String),
 }
 
 impl IntoResponse for ServiceError {

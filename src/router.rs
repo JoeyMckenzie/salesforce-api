@@ -6,28 +6,23 @@ use axum::{Json, Router};
 use serde_json::Value;
 use tracing::info;
 
-use crate::config::{SalesforceConfiguration, ServiceConfiguration};
 use crate::errors::ServiceResult;
-use crate::extractors::ValidatedJson;
+use crate::extractors::{ExtractSalesforceOrg, ValidatedJson};
 use crate::requests::CreateObjectRecordRequest;
 use crate::responses::TransactionSuccessfulResponse;
-use crate::salesforce::SalesforceService;
+use crate::salesforce::factory::SalesforceServiceResolver;
 
 #[derive(Debug)]
 pub struct RouterState {
-    service: SalesforceService,
+    pub resolver: SalesforceServiceResolver,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct ServiceRouter;
 
 impl ServiceRouter {
-    pub fn new_router(
-        salesforce_configuration: SalesforceConfiguration,
-        service_configuration: ServiceConfiguration,
-    ) -> Router {
-        let state = RouterState {
-            service: SalesforceService::new(salesforce_configuration, service_configuration),
-        };
+    pub fn new_router(resolver: SalesforceServiceResolver) -> Router {
+        let state = RouterState { resolver };
 
         Router::new()
             .route("/objects/:name/:id", get(find))
@@ -39,12 +34,17 @@ impl ServiceRouter {
 
 #[tracing::instrument(skip(state))]
 async fn find(
+    ExtractSalesforceOrg(header): ExtractSalesforceOrg,
     State(state): State<Arc<RouterState>>,
     Path((name, id)): Path<(String, String)>,
 ) -> ServiceResult<Json<Value>> {
     info!("Received request to find object {name} by id {id}, requesting access token");
 
-    let object = state.service.get_object_by_id(name, id.clone()).await?;
+    let object = state
+        .resolver
+        .resolve(header)
+        .get_object_by_id(name, id.clone())
+        .await?;
 
     Ok(Json(object))
 }
