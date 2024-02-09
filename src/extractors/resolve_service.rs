@@ -11,10 +11,10 @@ use crate::router::RouterState;
 use crate::salesforce::service::SalesforceService;
 
 #[derive(Debug)]
-pub struct ResolveSalesforceService(pub Arc<SalesforceService>);
+pub struct ResolveSalesforceServiceFromService(pub Arc<SalesforceService>);
 
 #[async_trait]
-impl FromRequestParts<Arc<RouterState>> for ResolveSalesforceService {
+impl FromRequestParts<Arc<RouterState>> for ResolveSalesforceServiceFromService {
     type Rejection = ServiceError;
 
     async fn from_request_parts(
@@ -35,7 +35,7 @@ impl FromRequestParts<Arc<RouterState>> for ResolveSalesforceService {
                     match org {
                         Ok(parsed_org) => {
                             let resolved_service = state.resolver.resolve(parsed_org);
-                            Ok(ResolveSalesforceService(resolved_service))
+                            Ok(ResolveSalesforceServiceFromService(resolved_service))
                         }
                         Err(e) => Err(ServiceError::InvalidOrganization(e.to_string())),
                     }

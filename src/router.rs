@@ -1,17 +1,19 @@
 use std::sync::Arc;
 
 use axum::extract::Path;
+use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde_json::Value;
 use tracing::info;
 
 use crate::errors::ServiceResult;
-use crate::extractors::resolve_service::ResolveSalesforceService;
+use crate::extractors::extract_org::ExtractSalesforceOrg;
+use crate::extractors::resolve_service::ResolveSalesforceServiceFromService;
 use crate::extractors::validation::ValidatedJson;
 use crate::requests::CreateObjectRecordRequest;
 use crate::responses::TransactionSuccessfulResponse;
-use crate::salesforce::factory::SalesforceServiceResolver;
+use crate::salesforce::resolver::SalesforceServiceResolver;
 
 #[derive(Debug)]
 pub struct RouterState {
@@ -27,16 +29,17 @@ impl ServiceRouter {
 
         Router::new()
             .route("/objects/:name/:id", get(find))
+            .route("/objects/:name/:id", put(update))
             .route("/objects/query", post(query))
             .route("/objects", post(create))
-            .route("/objects", put(update))
             .with_state(Arc::new(state))
     }
 }
 
 #[tracing::instrument]
 async fn find(
-    ResolveSalesforceService(service): ResolveSalesforceService,
+    ResolveSalesforceServiceFromService(service): ResolveSalesforceServiceFromService,
+    ExtractSalesforceOrg(org): ExtractSalesforceOrg,
     Path((name, id)): Path<(String, String)>,
 ) -> ServiceResult<Json<Value>> {
     info!("Received request to find object {name} by id {id}");
@@ -48,7 +51,7 @@ async fn find(
 
 #[tracing::instrument]
 async fn query(
-    ResolveSalesforceService(service): ResolveSalesforceService,
+    ResolveSalesforceServiceFromService(service): ResolveSalesforceServiceFromService,
     soql: String,
 ) -> ServiceResult<Json<Value>> {
     info!("Received request for SOQL query");
@@ -60,22 +63,28 @@ async fn query(
 
 #[tracing::instrument]
 async fn create(
-    ResolveSalesforceService(service): ResolveSalesforceService,
+    ResolveSalesforceServiceFromService(service): ResolveSalesforceServiceFromService,
     ValidatedJson(request): ValidatedJson<CreateObjectRecordRequest>,
 ) -> ServiceResult<TransactionSuccessfulResponse> {
     info!("Received request for query, executing...");
     Ok(TransactionSuccessfulResponse::new(
         "Record successfully created.".to_string(),
+        StatusCode::CREATED,
     ))
 }
 
 #[tracing::instrument]
 async fn update(
-    ResolveSalesforceService(service): ResolveSalesforceService,
-    ValidatedJson(request): ValidatedJson<CreateObjectRecordRequest>,
+    ResolveSalesforceServiceFromService(service): ResolveSalesforceServiceFromService,
+    Path((name, id)): Path<(String, String)>,
+    Json(request): Json<Value>,
 ) -> ServiceResult<TransactionSuccessfulResponse> {
-    info!("Received request for query, executing...");
+    info!("Received request for updating object");
+
+    service.update_object(name, id, request).await?;
+
     Ok(TransactionSuccessfulResponse::new(
-        "Record successfully created.".to_string(),
+        "Record successfully updated.".to_string(),
+        StatusCode::OK,
     ))
 }

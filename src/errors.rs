@@ -7,7 +7,7 @@ use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde_json::json;
+use serde_json::{json, Value};
 use thiserror::Error;
 use tracing::error;
 
@@ -53,6 +53,8 @@ pub enum ServiceError {
     ObjectNotFound,
     #[error("{0}")]
     InvalidOrganization(String),
+    #[error("An error occurred while attempting to update the object.")]
+    ObjectUpdateFailed(Value),
 }
 
 impl IntoResponse for ServiceError {
@@ -73,6 +75,9 @@ impl IntoResponse for ServiceError {
             }
             Self::RequestInvalid(err) => (StatusCode::UNPROCESSABLE_ENTITY, err.to_string()),
             Self::ObjectNotFound => (StatusCode::NOT_FOUND, Self::ObjectNotFound.to_string()),
+            Self::ObjectUpdateFailed(err) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response();
+            }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 String::from("Unexpected error occurred."),

@@ -29,6 +29,7 @@ pub struct ServiceConfiguration {
     pub encryption_base_uri: String,
     pub timeout_seconds: Option<u64>,
     pub port: Option<u16>,
+    pub salesforce_version: Option<String>,
 }
 
 #[derive(Debug, Clone)]

@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::config::{SalesforceConfiguration, ServiceConfiguration};
 use crate::errors::{ServiceError, ServiceResult};
@@ -121,11 +121,7 @@ impl SalesforceService {
             Ok(lock) => match lock.as_ref() {
                 None => Err(ServiceError::InstanceUrlNotFound),
                 Some(instance_url) => {
-                    let url = format!(
-                        "{}/services/data/v59.0/sobjects/{}/{}",
-                        instance_url, object, id
-                    );
-
+                    let url = format!("{instance_url}/services/data/v59.0/sobjects/{object}/{id}");
                     let response = self.http.get(&url).bearer_auth(access_token).send().await?;
 
                     if response.status() == StatusCode::NOT_FOUND {
@@ -163,6 +159,46 @@ impl SalesforceService {
                     let objects = response.json::<Value>().await?;
 
                     Ok(objects)
+                }
+            },
+            Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),
+        }
+    }
+
+    pub async fn update_object(
+        &self,
+        object: String,
+        id: String,
+        databag: Value,
+    ) -> ServiceResult<()> {
+        let access_token = self.get_access_token().await?;
+
+        match self.instance_url.try_lock() {
+            Ok(lock) => match lock.as_ref() {
+                None => Err(ServiceError::InstanceUrlNotFound),
+                Some(instance_url) => {
+                    info!("Updating {object} object {id}");
+
+                    let url = format!("{instance_url}/services/data/v59.0/sobjects/{object}/{id}");
+                    let response = self
+                        .http
+                        .patch(&url)
+                        .bearer_auth(access_token)
+                        .json(&databag)
+                        .send()
+                        .await?;
+
+                    if response.status() == StatusCode::NOT_FOUND {
+                        error!("{object} object {id} was not found, not update was performed");
+                        return Err(ServiceError::ObjectNotFound);
+                    }
+
+                    if response.status() != StatusCode::NO_CONTENT {
+                        let error_response = response.json::<Value>().await?;
+                        return Err(ServiceError::ObjectUpdateFailed(error_response));
+                    }
+
+                    Ok(())
                 }
             },
             Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),

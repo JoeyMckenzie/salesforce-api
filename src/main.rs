@@ -4,7 +4,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use salesforce_api::config::load_salesforce_configurations;
 use salesforce_api::errors::ServiceResult;
 use salesforce_api::router::ServiceRouter;
-use salesforce_api::salesforce::factory::SalesforceServiceResolver;
+use salesforce_api::salesforce::resolver::SalesforceServiceResolver;
 
 #[tokio::main]
 async fn main() -> ServiceResult<()> {
