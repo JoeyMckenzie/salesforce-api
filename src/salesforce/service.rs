@@ -6,19 +6,18 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::Value;
 use time::OffsetDateTime;
-use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::config::{SalesforceConfiguration, ServiceConfiguration};
 use crate::errors::{ServiceError, ServiceResult};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SalesforceService {
     http: reqwest::Client,
     config: SalesforceConfiguration,
-    access_token: Mutex<Option<String>>,
-    instance_url: Mutex<Option<String>>,
-    expires_at: Mutex<OffsetDateTime>,
+    access_token: Option<String>,
+    instance_url: Option<String>,
+    expires_at: Option<OffsetDateTime>,
 }
 
 impl SalesforceService {
@@ -35,44 +34,38 @@ impl SalesforceService {
         Self {
             http: client,
             config: salesforce_configuration,
-            access_token: Mutex::new(None),
-            instance_url: Mutex::new(None),
-            expires_at: Mutex::new(OffsetDateTime::UNIX_EPOCH),
+            access_token: None,
+            instance_url: None,
+            expires_at: None,
         }
     }
 
-    fn try_access_token(&self) -> ServiceResult<Option<String>> {
-        match self.access_token.try_lock() {
-            Ok(token_lock) => match token_lock.as_ref() {
-                None => Err(ServiceError::AccessTokenNotFound),
-                Some(token) => match self.try_refresh_required() {
-                    Ok(refresh_required) => {
-                        if refresh_required {
-                            Ok(None)
-                        } else {
-                            Ok(Some(token.to_owned()))
-                        }
-                    }
-                    Err(e) => Err(ServiceError::AuthenticationLockFailed(e.to_string())),
-                },
-            },
-            Err(e) => Err(ServiceError::AuthenticationLockFailed(e.to_string())),
-        }
-    }
-
-    fn try_refresh_required(&self) -> ServiceResult<bool> {
-        match self.expires_at.try_lock() {
-            Ok(expiration) => {
-                let now = OffsetDateTime::now_utc();
-                Ok(expiration.le(&now))
+    fn check_access_token(&self) -> ServiceResult<Option<String>> {
+        match &self.access_token {
+            None => Err(ServiceError::AccessTokenNotFound),
+            Some(token) => {
+                if self.refresh_required() {
+                    Ok(None)
+                } else {
+                    Ok(Some(token.to_owned()))
+                }
             }
-            Err(e) => Err(ServiceError::AuthenticationLockFailed(e.to_string())),
         }
     }
 
-    async fn get_access_token(&self) -> ServiceResult<String> {
+    fn refresh_required(&self) -> bool {
+        match self.expires_at {
+            None => true,
+            Some(expiration) => {
+                let now = OffsetDateTime::now_utc();
+                expiration.le(&now)
+            }
+        }
+    }
+
+    async fn get_access_token(&mut self) -> ServiceResult<String> {
         // If we have a cached access token, go ahead and grab it as it hasn't hit the expired time yet
-        if let Ok(Some(cached_token)) = self.try_access_token() {
+        if let Ok(Some(cached_token)) = self.check_access_token() {
             info!("Cached token found");
             return Ok(cached_token);
         }
@@ -94,78 +87,65 @@ impl SalesforceService {
             .await?
             .json::<AccessTokenResponse>()
             .await?;
-        dbg!(&token_response);
         let access_token = token_response.access_token;
         let instance_url = token_response.instance_url;
 
-        if let Ok(mut token_lock) = self.access_token.try_lock() {
-            *token_lock = Some(access_token.clone());
-        }
-
-        if let Ok(mut instance_url_lock) = self.instance_url.try_lock() {
-            *instance_url_lock = Some(instance_url);
-        }
-
-        if let Ok(mut expiration_lock) = self.expires_at.try_lock() {
-            let expires_in_duration = Duration::from_secs(60 * 30);
-            *expiration_lock = OffsetDateTime::now_utc().add(expires_in_duration);
-        }
+        let expires_in_duration = Duration::from_secs(60 * 30);
+        self.access_token = Some(access_token.clone());
+        self.instance_url = Some(instance_url);
+        self.expires_at = Some(OffsetDateTime::now_utc().add(expires_in_duration));
 
         Ok(access_token)
     }
 
-    pub async fn get_object_by_id(&self, object: String, id: String) -> ServiceResult<Value> {
+    #[tracing::instrument]
+    pub async fn get_object_by_id(&mut self, object: String, id: String) -> ServiceResult<Value> {
         let access_token = self.get_access_token().await?;
 
-        match self.instance_url.try_lock() {
-            Ok(lock) => match lock.as_ref() {
-                None => Err(ServiceError::InstanceUrlNotFound),
-                Some(instance_url) => {
-                    let url = format!(
-                        "{}/services/data/v59.0/sobjects/{}/{}",
-                        instance_url, object, id
-                    );
+        match &self.instance_url {
+            None => Err(ServiceError::InstanceUrlNotFound),
+            Some(instance_url) => {
+                let url = format!(
+                    "{}/services/data/v59.0/sobjects/{}/{}",
+                    instance_url, object, id
+                );
 
-                    let response = self.http.get(&url).bearer_auth(access_token).send().await?;
+                let response = self.http.get(&url).bearer_auth(access_token).send().await?;
 
-                    if response.status() == StatusCode::NOT_FOUND {
-                        return Err(ServiceError::ObjectNotFound);
-                    }
-
-                    let object = response.json::<Value>().await?;
-
-                    Ok(object)
+                if response.status() == StatusCode::NOT_FOUND {
+                    return Err(ServiceError::ObjectNotFound);
                 }
-            },
-            Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),
+
+                let object = response.json::<Value>().await?;
+
+                Ok(object)
+            }
         }
     }
 
-    pub async fn get_objects(&self, soql: String) -> ServiceResult<Value> {
+    #[tracing::instrument]
+    pub async fn get_objects(&mut self, soql: String) -> ServiceResult<Value> {
         let access_token = self.get_access_token().await?;
 
-        match self.instance_url.try_lock() {
-            Ok(lock) => match lock.as_ref() {
-                None => Err(ServiceError::InstanceUrlNotFound),
-                Some(instance_url) => {
-                    let regex = Regex::new(r"\s+").unwrap();
-                    let updated_soql = regex.replace_all(&soql, " ").to_string();
+        match &self.instance_url {
+            None => Err(ServiceError::InstanceUrlNotFound),
+            Some(instance_url) => {
+                let regex = Regex::new(r"\s+").unwrap();
+                let updated_soql = regex.replace_all(&soql, " ").to_string();
 
-                    info!("Executing adjusted SOQL query:\n{updated_soql}");
+                info!("Executing adjusted SOQL query:\n{updated_soql}");
 
-                    let url = format!(
-                        "{}/services/data/v59.0/query/?q={}",
-                        instance_url,
-                        updated_soql.replace(' ', "+")
-                    );
+                let url = format!(
+                    "{}/services/data/v59.0/query/?q={}",
+                    instance_url,
+                    updated_soql.replace(' ', "+")
+                );
 
-                    let response = self.http.get(&url).bearer_auth(access_token).send().await?;
-                    let objects = response.json::<Value>().await?;
+                let response = self.http.get(&url).bearer_auth(access_token).send().await?;
+                let objects = response.json::<Value>().await?;
 
-                    Ok(objects)
-                }
-            },
-            Err(e) => Err(ServiceError::ObjectRetrievalFailed(e.to_string())),
+                Ok(objects)
+            }
         }
     }
 }
@@ -174,7 +154,6 @@ impl SalesforceService {
 struct AccessTokenResponse {
     pub access_token: String,
     pub instance_url: String,
-    pub id: String,
     pub token_type: String,
     pub issued_at: String,
     pub signature: String,

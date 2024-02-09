@@ -1,24 +1,18 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde_json::Value;
 use tracing::info;
 
+use crate::config::AggregateSystemConfiguration;
 use crate::errors::ServiceResult;
-use crate::extractors::extract_org::ExtractSalesforceOrg;
 use crate::extractors::resolve_service::ResolveSalesforceService;
 use crate::extractors::validation::ValidatedJson;
 use crate::requests::CreateObjectRecordRequest;
 use crate::responses::TransactionSuccessfulResponse;
-use crate::salesforce::factory::SalesforceServiceResolver;
 use crate::salesforce::service::SalesforceService;
-
-#[derive(Debug)]
-pub struct RouterState {
-    pub resolver: SalesforceServiceResolver,
-}
 
 #[derive(Debug)]
 pub struct AppState {
@@ -31,8 +25,22 @@ pub struct AppState {
 pub struct ServiceRouter;
 
 impl ServiceRouter {
-    pub fn new_router(resolver: SalesforceServiceResolver) -> Router {
-        let state = RouterState { resolver };
+    pub fn new_router(system_configuration: AggregateSystemConfiguration) -> Router {
+        let service_config = system_configuration.service_config;
+        let state = AppState {
+            uw_service: SalesforceService::new(
+                system_configuration.uw_salesforce_config,
+                service_config.clone(),
+            ),
+            qb_service: SalesforceService::new(
+                system_configuration.qb_salesforce_config,
+                service_config.clone(),
+            ),
+            nf_service: SalesforceService::new(
+                system_configuration.nf_salesforce_config,
+                service_config,
+            ),
+        };
 
         Router::new()
             .route("/objects/:name/:id", get(find))
@@ -43,26 +51,21 @@ impl ServiceRouter {
     }
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument]
 async fn find(
-    ExtractSalesforceOrg(header): ExtractSalesforceOrg,
-    State(state): State<Arc<RouterState>>,
+    ResolveSalesforceService(mut service): ResolveSalesforceService,
     Path((name, id)): Path<(String, String)>,
 ) -> ServiceResult<Json<Value>> {
     info!("Received request to find object {name} by id {id}");
 
-    let object = state
-        .resolver
-        .resolve(header)
-        .get_object_by_id(name, id.clone())
-        .await?;
+    let object = service.get_object_by_id(name, id.clone()).await?;
 
     Ok(Json(object))
 }
 
 #[tracing::instrument]
 async fn query(
-    ResolveSalesforceService(service): ResolveSalesforceService,
+    ResolveSalesforceService(mut service): ResolveSalesforceService,
     soql: String,
 ) -> ServiceResult<Json<Value>> {
     info!("Received request for SOQL query");

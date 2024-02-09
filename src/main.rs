@@ -4,7 +4,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use salesforce_api::config::load_salesforce_configurations;
 use salesforce_api::errors::ServiceResult;
 use salesforce_api::router::ServiceRouter;
-use salesforce_api::salesforce::factory::SalesforceServiceResolver;
 
 #[tokio::main]
 async fn main() -> ServiceResult<()> {
@@ -21,9 +20,8 @@ async fn main() -> ServiceResult<()> {
 
     let system_configuration = load_salesforce_configurations().await?;
     let port = system_configuration.service_config.port;
-    let salesforce_resolver = SalesforceServiceResolver::new(system_configuration);
     let port = port.unwrap_or(8080);
-    let router = ServiceRouter::new_router(salesforce_resolver);
+    let router = ServiceRouter::new_router(system_configuration);
 
     info!(
         "Configuration successfully parsed, starting server on port {}",

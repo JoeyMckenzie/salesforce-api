@@ -1,2 +1,2 @@
-pub mod factory;
+pub mod resolver;
 pub mod service;
